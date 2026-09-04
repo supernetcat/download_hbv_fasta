@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# PyInstaller
+build/
+dist/
+*.spec
+
+# 本项目的 release 二进制已手动放入 releases/（按需），
+# 其余编译产物忽略:
+!releases/
+
+# 本地敏感配置
+ncbi_key.txt
+*.key
+.env
+
+# 下载的 FASTA
+*.fasta
+*.fa
+*.fna
