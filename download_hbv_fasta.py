@@ -29,6 +29,12 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+# Windows 控制台/管道默认不是 UTF-8，强制 UTF-8 输出，避免打印中文时报
+# UnicodeEncodeError（对 PyInstaller 打包的 exe 同样生效）
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 ESearch_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
 EFetch_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
 
