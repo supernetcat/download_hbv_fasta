@@ -14,6 +14,8 @@
   PyInstaller one-file 二进制到对应 tag 的 Release（`overwrite: true` 可补发既有版本资产）
 - 为 v1.0.1 Release 补发 `linux-arm64` / `windows-x64.exe` / `macos-x64` /
   `macos-arm64` 官方二进制
+- 修复 Windows 控制台/管道默认非 UTF-8 编码导致打印中文（帮助/进度）时抛
+  `UnicodeEncodeError` 的问题：启动时强制 stdout/stderr 使用 UTF-8 输出
 
 # v1.0.0 (2026-09-04)
 
