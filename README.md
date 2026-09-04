@@ -11,7 +11,7 @@ AND is_nuccore[filter] AND ("3000"[SLEN] : "3400"[SLEN]))
 - 纯 Python 标准库实现，**无需安装任何第三方依赖**
 - 自动分页检索（esearch）+ 分批抓取（efetch），带重试、限速、断点进度
 - 支持自定义搜索式、输出文件、下载条数上限、NCBI API key
-- 已打包为独立二进制（Linux x64），双击即用
+- 已打包多平台独立二进制（Linux x64/arm64、Windows x64、macOS x64/arm64），免安装 Python
 
 ---
 
@@ -21,35 +21,48 @@ AND is_nuccore[filter] AND ("3000"[SLEN] : "3400"[SLEN]))
 hbv_fasta_download/
 ├── download_hbv_fasta.py      # 源码（Python 3.8+）
 ├── build.sh                   # 一键打包脚本
+├── .github/workflows/build.yml # CI：多平台编译并发布 Release
 ├── .gitignore
 ├── README.md
-└── releases/                  # 编译好的二进制
+└── releases/                  # 本机编译的二进制（Linux x64）
     └── linux-x64/
-        └── download_hbv_fasta # 7.7 MB，无需 Python 环境
+        └── download_hbv_fasta # 免 Python 环境
 ```
 
 ---
 
 ## 快速开始（免安装）
 
-**Linux x86_64** 用户直接运行：
+在 [GitHub Releases](https://github.com/supernetcat/download_hbv_fasta/releases) 下载
+对应平台的二进制（当前 v1.0.1，无需 Python 环境）：
+
+| 平台 | 资产名 |
+|------|--------|
+| Linux x86_64 | `download_hbv_fasta-linux-x64` |
+| Linux arm64 | `download_hbv_fasta-linux-arm64` |
+| Windows x86_64 | `download_hbv_fasta-windows-x64.exe` |
+| macOS (Intel) | `download_hbv_fasta-macos-x64` |
+| macOS (Apple Silicon) | `download_hbv_fasta-macos-arm64` |
+
+**Linux / macOS**：
 
 ```bash
-# 1. 赋予执行权限
-chmod +x releases/linux-x64/download_hbv_fasta
+# 1. 赋予执行权限（Windows 跳过）
+chmod +x download_hbv_fasta
 
 # 2. 试运行：只下载前 10 条，确认网络与功能正常
-releases/linux-x64/download_hbv_fasta -n 10 -o sample.fasta
+./download_hbv_fasta -n 10 -o sample.fasta
 
 # 3. 全量下载（当前检索约 1.7 万条，耗时约 5–15 分钟，视网络而定）
-releases/linux-x64/download_hbv_fasta
+./download_hbv_fasta
 # 输出文件默认: hbv_genomic.fasta
 ```
 
-**Windows / macOS**：用源码运行（需 Python 3.8+）：
+**Windows**（PowerShell）：运行 `download_hbv_fasta-windows-x64.exe -n 10 -o sample.fasta`
 
+想从源码运行（需 Python 3.8+，无需 pyinstaller）：
 ```bash
-python download_hbv_fasta.py
+python3 download_hbv_fasta.py
 ```
 
 ---
@@ -149,13 +162,15 @@ A: 改 `-q` 参数即可，例如把 `"3000"[SLEN] : "3400"[SLEN]` 换成 `"3100
 
 ## 自行编译二进制
 
-已随附 Linux x64 二进制。若需在其他平台使用：
+仓库已配置 GitHub Actions workflow（`.github/workflows/build.yml`）：打 `v*` tag
+或手动触发即自动在 Linux/Windows/macOS runner 上编译全部平台二进制并发布到 Release。
+
+本地自行编译：
 
 ```bash
-# Windows / macOS / 其他 Linux
 pip install pyinstaller
 ./build.sh
-# 产物在 dist/download_hbv_fasta
+# 产物在 dist/download_hbv_fasta（仅当前平台）
 ```
 
 或直接运行源码（无需 pyinstaller）：
@@ -172,7 +187,7 @@ python3 download_hbv_fasta.py
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
-| 1.0.1 | 2026-09-05 | 修复大批量下载 (>250 条) 时 efetch URL 过长导致 HTTP 414；自动改用 POST |
+| 1.0.1 | 2026-09-05 | 修复大批量下载 (>250 条) 时 efetch URL 过长导致 HTTP 414；自动改用 POST。后补发布 Windows/macOS/Linux-arm64 官方二进制（GitHub Actions 编译） |
 | 1.0.0 | 2026-09-04 | 首个公开版本；默认 HBV 搜索式；`-q/-o/-n/--api` 参数 |
 
 ---
