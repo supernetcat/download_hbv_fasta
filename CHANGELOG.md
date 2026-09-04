@@ -8,6 +8,13 @@
 - 验证：`-n 100`(GET) / `-n 500`(POST) / `-n 501`(GET+POST) / `-n 600` / `-n 1000`
   均成功且 FASTA 记录数正确
 
+## 补充（2026-09-05）
+- 新增 GitHub Actions 工作流 `.github/workflows/build.yml`：打 `v*` tag 或手动触发时，
+  在 Linux (x64/arm64)、Windows (x64)、macOS (Intel/Apple Silicon) 上分别编译并发布
+  PyInstaller one-file 二进制到对应 tag 的 Release（`overwrite: true` 可补发既有版本资产）
+- 为 v1.0.1 Release 补发 `linux-arm64` / `windows-x64.exe` / `macos-x64` /
+  `macos-arm64` 官方二进制
+
 # v1.0.0 (2026-09-04)
 
 首个公开版本。
