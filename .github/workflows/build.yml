@@ -1,0 +1,109 @@
+name: build-binaries
+
+# 多平台编译 download_hbv_fasta。
+# PyInstaller 不支持交叉编译，故在各自平台 runner 上分别打包。
+#
+# 触发方式：
+#   1. 手动 (workflow_dispatch)：填 release_tag 则把产物上传到该 tag 的
+#      GitHub Release（可补发既有 release 的资产）；留空则只保存 Actions artifact。
+#   2. push tag v*：自动编译并发布到同名 Release。
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "上传产物到该 tag 的 release（如 v1.0.1）；留空则仅存 artifact"
+        required: false
+        default: ''
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build-${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            os: ubuntu-latest
+            asset: download_hbv_fasta-linux-x64
+          - name: linux-arm64
+            os: ubuntu-24.04-arm
+            asset: download_hbv_fasta-linux-arm64
+          - name: windows-x64
+            os: windows-latest
+            asset: download_hbv_fasta-windows-x64.exe
+          - name: macos-x64
+            os: macos-14
+            asset: download_hbv_fasta-macos-x64
+          - name: macos-arm64
+            os: macos-latest
+            asset: download_hbv_fasta-macos-arm64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PyInstaller
+        run: python -m pip install --upgrade pyinstaller
+
+      - name: Build one-file binary
+        run: |
+          python -m PyInstaller --onefile --clean --name download_hbv_fasta download_hbv_fasta.py
+          exe=""
+          [ "$RUNNER_OS" = "Windows" ] && exe=".exe"
+          mkdir -p final
+          cp "dist/download_hbv_fasta${exe}" "final/${{ matrix.asset }}"
+          ls -la final
+        shell: bash
+
+      - name: Verify version
+        run: |
+          [ "$RUNNER_OS" = "Windows" ] && bin="final/${{ matrix.asset }}" || bin="final/${{ matrix.asset }}"
+          "$bin" --help >/dev/null 2>&1 && echo "binary OK"
+        shell: bash
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.name }}
+          path: final/${{ matrix.asset }}
+          if-no-files-found: error
+
+  publish:
+    name: publish-to-release
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag != '')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG_NAME: ${{ github.event.inputs.release_tag || github.ref_name }}
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: find artifacts -type f -exec ls -la {} \;
+
+      - name: Upload assets to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          files: artifacts/*
+          overwrite: true
