@@ -41,9 +41,11 @@ DEFAULT_QUERY = (
 PAGE_SIZE = 10000         # esearch 每次最多返回 10000 个 id
 BATCH_SIZE = 500          # 每次 efetch 请求取多少条 FASTA
 REQUEST_SLEEP = 0.5       # 每次请求间隔秒数（NCBI 建议 <3 req/s）
+DEFAULT_RETRY_BASE = 2.0  # 重试退避基数
 MAX_RETRIES = 5
+MAX_URL_LEN = 3000        # URL（含查询串）超过此长度时改用 POST，避免 414
 
-USER_AGENT = "hbv-fasta-downloader/1.0 (Python urllib)"
+USER_AGENT = "hbv-fasta-downloader/1.0.1 (Python urllib)"
 
 API_KEY = None  # 在 main() 中初始化
 
@@ -64,25 +66,62 @@ def load_api_key(value: str) -> str:
     return value
 
 
-def http_get_text(url: str, params: dict) -> str:
-    """GET 请求，带重试。"""
+def http_request(url: str, params: dict, use_post: bool = False) -> str:
+    """对 NCBI eutils 发请求。
+
+    - use_post=False: 标准 GET，参数拼在 URL 上
+    - use_post=True:  参数放请求体（Content-Type: application/x-www-form-urlencoded）
+
+    带指数退避重试（最多 MAX_RETRIES 次）；4xx（除 429）不重试。
+    """
     if API_KEY:
         params = dict(params, api_key=API_KEY)
-    full_url = f"{url}?{urllib.parse.urlencode(params)}"
-    last_err = None
+    last_err: Exception | None = None
+    if use_post:
+        target = url
+        body = urllib.parse.urlencode(params).encode("utf-8")
+        headers = {
+            "User-Agent": USER_AGENT,
+            "Content-Type": "application/x-www-form-urlencoded",
+        }
+    else:
+        target = f"{url}?{urllib.parse.urlencode(params)}"
+        body = None
+        headers = {"User-Agent": USER_AGENT}
     for attempt in range(1, MAX_RETRIES + 1):
+        req = urllib.request.Request(target, data=body, headers=headers)
         try:
-            req = urllib.request.Request(full_url, headers={"User-Agent": USER_AGENT})
             with urllib.request.urlopen(req, timeout=120) as resp:
                 return resp.read().decode("utf-8", errors="replace")
-        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError,
-                ConnectionError) as e:
+        except urllib.error.HTTPError as e:
             last_err = e
-            wait = REQUEST_SLEEP * (2 ** attempt)
-            print(f"  [警告] 请求失败（第 {attempt}/{MAX_RETRIES} 次）: {e}，"
-                  f"{wait:.1f}s 后重试...", file=sys.stderr)
-            time.sleep(wait)
-    raise RuntimeError(f"请求最终失败: {full_url}") from last_err
+            # 4xx 且非 429：请求本身就有问题，重试无意义
+            if 400 <= e.code < 500 and e.code != 429:
+                raise
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
+            last_err = e
+        wait = REQUEST_SLEEP * (2 ** attempt)
+        print(f"  [警告] 请求失败（第 {attempt}/{MAX_RETRIES} 次）: {last_err}，"
+              f"{wait:.1f}s 后重试...", file=sys.stderr)
+        time.sleep(wait)
+    raise RuntimeError("请求最终失败") from last_err
+
+
+def efetch_fasta(ids: list) -> str:
+    """下载一批 id 的 FASTA。
+    id 多时 GET 的 URL 会过长触发 NCBI 代理 414 (Request-URI Too Long)，
+    此时改用 POST（参数放请求体，无 URL 长度限制）。
+    """
+    params = {
+        "db": "nucleotide",
+        "rettype": "fasta",
+        "retmode": "text",
+        "id": ",".join(ids),
+    }
+    # 估算最终 URL 长度
+    estimated = len(EFetch_URL) + len(urllib.parse.urlencode(params))
+    use_post = estimated > MAX_URL_LEN
+    return http_request(EFetch_URL, params, use_post=use_post)
 
 
 def esearch(query: str, retmax: int, retstart: int = 0) -> dict:
@@ -93,20 +132,10 @@ def esearch(query: str, retmax: int, retstart: int = 0) -> dict:
         "retstart": retstart,
         "retmode": "json",
     }
-    data = json.loads(http_get_text(ESearch_URL, params))
+    data = json.loads(http_request(ESearch_URL, params))
     if "error" in data:
         raise RuntimeError(f"esearch 报错: {data['error']}")
     return data.get("esearchresult", data)
-
-
-def efetch_fasta(ids: list) -> str:
-    params = {
-        "db": "nucleotide",
-        "rettype": "fasta",
-        "retmode": "text",
-        "id": ",".join(ids),
-    }
-    return http_get_text(EFetch_URL, params)
 
 
 def get_all_ids(query: str, limit: int = 0) -> list:
